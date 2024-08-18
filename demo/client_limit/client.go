@@ -7,10 +7,13 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/jiuyee123/go/shield/demo"
 )
+
+var sleepTime = 300 * time.Millisecond
 
 func main() {
 	if len(os.Args) != 3 {
@@ -32,7 +35,7 @@ func main() {
 				"message": "hello",
 				"time":    time.Now(),
 			})
-			time.Sleep(20 * time.Microsecond)
+			time.Sleep(sleepTime)
 		}
 	}()
 
@@ -129,8 +132,13 @@ func handleServerResponse(conn net.Conn) {
 		log.Printf("Failed to unmarshal JSON: %v", err)
 		return
 	}
-
-	log.Printf("Received message type %d with content: %v", msgType, message)
+	// 模拟动态调整发送频率，如果服务器返回错误，则增加发送频率，如果服务器返回正常，则减少发送频率
+	if strings.Contains(message["message"].(string), "error") {
+		sleepTime += 5 * time.Millisecond
+	} else {
+		sleepTime -= 5 * time.Millisecond
+	}
+	log.Printf("Received message type %d with content: %v, sleepTime: %v", msgType, message, sleepTime)
 }
 
 // 启动心跳包发送
