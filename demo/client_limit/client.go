@@ -32,7 +32,7 @@ func main() {
 				"message": "hello",
 				"time":    time.Now(),
 			})
-			time.Sleep(20 * time.Second)
+			time.Sleep(20 * time.Microsecond)
 		}
 	}()
 

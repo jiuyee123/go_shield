@@ -26,7 +26,7 @@ func main() {
 	lb.AddBackend(goshield.Backend{Address: "localhost:8082", Weight: 1})
 	lb.AddBackend(goshield.Backend{Address: "localhost:8083", Weight: 1})
 
-	proxy, err := goshield.NewTCPLoadBalancer(config, lb)
+	proxy, err := goshield.NewTCPLoadBalancer(config, lb, goshield.DefaultTokenBucket())
 	if err != nil {
 		log.Fatalf("Failed to create TCP load balancer: %v", err)
 	}
