@@ -1,10 +1,15 @@
 package goshield
 
 import (
+	"encoding/binary"
+	"encoding/json"
 	"errors"
+	"log"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/jiuyee123/go/shield/demo"
 )
 
 type RoundRobinLoadBalancer struct {
@@ -60,7 +65,41 @@ func (lb *RoundRobinLoadBalancer) HealthCheck() {
 		if err != nil {
 			lb.RemoveBackend(backend)
 		} else {
+			sendBeatHeart(conn)
 			conn.Close()
 		}
+	}
+}
+
+func sendBeatHeart(conn net.Conn) {
+	var version uint8 = 1
+	binary.Write(conn, binary.BigEndian, version)
+
+	// Send response with message type
+	err := binary.Write(conn, binary.BigEndian, demo.Func_HeartBeat_Server)
+	if err != nil {
+		log.Printf("Error writing message type: %v", err)
+		return
+	}
+
+	request := map[string]interface{}{
+		"srvTime": time.Now().Format("20060102150405"),
+	}
+	requestData, err := json.Marshal(request)
+	if err != nil {
+		log.Printf("Error marshalling response: %v", err)
+		return
+	}
+	reqLength := uint16(len(requestData))
+	err = binary.Write(conn, binary.BigEndian, reqLength)
+	if err != nil {
+		log.Printf("Error writing message length: %v", err)
+		return
+	}
+
+	_, err = conn.Write(requestData)
+	if err != nil {
+		log.Printf("Error writing response: %v", err)
+		return
 	}
 }

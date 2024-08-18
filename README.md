@@ -63,3 +63,29 @@
     - 可以保证请求的响应时间。
 - 缺点：
     - 维护响应时间的开销较大，可能无法处理短连接高并发的场景。
+
+## Demo的使用
+代码放在`demo`目录下，分为`server`和`client`两个目录。
+- `server`目录下是服务端的代码，使用`net`包的`Listen`函数创建一个TCP监听器，然后在一个goroutine中接受连接请求，并将这些请求传递给`TCPLoadBalancer`的`Accept`方法。
+- `client`目录下是客户端的代码，使用`net`包的`Dial`函数创建一个TCP连接，然后在一个goroutine中发送请求，并将这些请求传递给`TCPLoadBalancer`的`Send`方法。    
+
+首先启动server下的代码
+```
+go run server.go 8081
+go run server.go 8082
+go run server.go 8083
+```
+
+然后启动load_balancer下的代码
+```
+go run load_balancer.go
+```
+
+然后启动client下的代码
+```
+go run client.go localhost 8080
+```
+
+Demo 里面的消息格式为;
+| 版本号(1字节) | 消息类型(1字节) | 数据长度(2字节) | 数据内容(可变长度) |
+可以选择使用xml，json，还有protobuf等，这里使用的是json

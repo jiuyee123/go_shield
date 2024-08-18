@@ -23,8 +23,8 @@ func main() {
 
 	// 添加后端服务器
 	lb.AddBackend(goshield.Backend{Address: "localhost:8081", Weight: 1})
-	lb.AddBackend(goshield.Backend{Address: "localhost:8082", Weight: 1})
-	lb.AddBackend(goshield.Backend{Address: "localhost:8083", Weight: 1})
+	// lb.AddBackend(goshield.Backend{Address: "localhost:8082", Weight: 1})
+	// lb.AddBackend(goshield.Backend{Address: "localhost:8083", Weight: 1})
 
 	proxy, err := goshield.NewTCPLoadBalancer(config, lb)
 	if err != nil {
