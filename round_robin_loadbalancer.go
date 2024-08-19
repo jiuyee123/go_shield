@@ -33,8 +33,8 @@ func (lb *RoundRobinLoadBalancer) AddBackend(backend Backend) {
 func (lb *RoundRobinLoadBalancer) RemoveBackend(backend *Backend) {
 	lb.mu.Lock()
 	defer lb.mu.Unlock()
-	for i, backend := range lb.backends {
-		if backend.Address == backend.Address {
+	for i, b := range lb.backends {
+		if b.Address == backend.Address {
 			lb.backends = append(lb.backends[:i], lb.backends[i+1:]...)
 			break
 		}
