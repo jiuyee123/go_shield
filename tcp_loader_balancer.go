@@ -12,13 +12,14 @@ import (
 )
 
 type TCPLoadBalancer struct {
-	listener net.Listener
-	lb       LoadBalancer
-	config   Config
-	conns    map[net.Conn]struct{}
-	mu       sync.Mutex
-	done     chan struct{}
-	bucket   *TokenBucket
+	listener        net.Listener
+	lb              LoadBalancer
+	config          Config
+	clients         map[string]*Client
+	mu              sync.Mutex
+	done            chan struct{}
+	bucket          *TokenBucket
+	timeoutInterval int
 }
 
 func NewTCPLoadBalancer(config Config, lb LoadBalancer, bucket *TokenBucket) (*TCPLoadBalancer, error) {
@@ -28,16 +29,23 @@ func NewTCPLoadBalancer(config Config, lb LoadBalancer, bucket *TokenBucket) (*T
 	}
 
 	return &TCPLoadBalancer{
-		listener: listener,
-		lb:       lb,
-		config:   config,
-		conns:    make(map[net.Conn]struct{}),
-		done:     make(chan struct{}),
-		bucket:   bucket,
+		listener:        listener,
+		lb:              lb,
+		config:          config,
+		clients:         make(map[string]*Client),
+		done:            make(chan struct{}),
+		bucket:          bucket,
+		timeoutInterval: 50,
 	}, nil
 }
 
+type Client struct {
+	conn       net.Conn
+	lastActive time.Time
+}
+
 func (t *TCPLoadBalancer) Start() error {
+	go t.startHeartbeatChecker()
 	go t.acceptConnections()
 	return nil
 }
@@ -47,8 +55,8 @@ func (t *TCPLoadBalancer) Stop() {
 	t.listener.Close()
 
 	t.mu.Lock()
-	for conn := range t.conns {
-		conn.Close()
+	for _, client := range t.clients {
+		client.conn.Close()
 	}
 	t.mu.Unlock()
 }
@@ -61,33 +69,61 @@ func (t *TCPLoadBalancer) acceptConnections() {
 	for {
 		conn, err := t.listener.Accept()
 		if err != nil {
+
+			t.removeClient(conn.RemoteAddr().String())
 			select {
 			case <-t.done:
 				return
 			default:
 				log.Printf("Error accepting connection: %v", err)
-				continue
+				return
 			}
 		}
 
 		t.mu.Lock()
-		if len(t.conns) >= t.config.MaxConnections {
+		if len(t.clients) >= t.config.MaxConnections {
 			t.mu.Unlock()
 			conn.Close()
 			continue
 		}
-		t.conns[conn] = struct{}{}
+		t.clients[conn.RemoteAddr().String()] = &Client{
+			conn:       conn,
+			lastActive: time.Now(),
+		}
 		t.mu.Unlock()
 
 		go t.handleConnection(conn)
 	}
 }
 
+func (t *TCPLoadBalancer) startHeartbeatChecker() {
+	ticker := time.NewTicker(60 * time.Second)
+
+	for range ticker.C {
+		t.mu.Lock()
+		for addr, client := range t.clients {
+			if time.Since(client.lastActive) > time.Duration(t.timeoutInterval*int(time.Second)) {
+				fmt.Println("Closing inactive connection:", addr)
+				client.conn.Close()
+				delete(t.clients, addr)
+			}
+		}
+		t.mu.Unlock()
+	}
+}
+
+func (t *TCPLoadBalancer) removeClient(addr string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	delete(t.clients, addr)
+	fmt.Println("Client removed:", addr)
+}
+
 func (t *TCPLoadBalancer) handleConnection(clientConn net.Conn) {
 	defer func() {
 		clientConn.Close()
 		t.mu.Lock()
-		delete(t.conns, clientConn)
+		delete(t.clients, clientConn.RemoteAddr().String())
 		t.mu.Unlock()
 	}()
 
@@ -138,6 +174,12 @@ func (t *TCPLoadBalancer) handleConnection(clientConn net.Conn) {
 		if err != nil {
 			fmt.Println("Failed to read message data:", err)
 			return
+		}
+
+		if client, ok := t.clients[clientConn.RemoteAddr().String()]; ok {
+			t.mu.Lock()
+			client.lastActive = time.Now()
+			t.mu.Unlock()
 		}
 
 		// 限流逻辑处理
