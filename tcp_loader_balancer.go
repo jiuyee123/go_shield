@@ -42,6 +42,7 @@ func NewTCPLoadBalancer(config Config, lb LoadBalancer, bucket *TokenBucket) (*T
 type Client struct {
 	conn       net.Conn
 	lastActive time.Time
+	mu         sync.Mutex // 为了提高性能，使用细粒度锁，但这个细粒度锁，需要
 }
 
 func (t *TCPLoadBalancer) Start() error {
@@ -100,15 +101,15 @@ func (t *TCPLoadBalancer) startHeartbeatChecker() {
 	ticker := time.NewTicker(60 * time.Second)
 
 	for range ticker.C {
-		t.mu.Lock()
 		for addr, client := range t.clients {
+			client.mu.Lock()
 			if time.Since(client.lastActive) > time.Duration(t.timeoutInterval*int(time.Second)) {
 				fmt.Println("Closing inactive connection:", addr)
 				client.conn.Close()
 				delete(t.clients, addr)
 			}
+			client.mu.Unlock()
 		}
-		t.mu.Unlock()
 	}
 }
 
@@ -177,9 +178,9 @@ func (t *TCPLoadBalancer) handleConnection(clientConn net.Conn) {
 		}
 
 		if client, ok := t.clients[clientConn.RemoteAddr().String()]; ok {
-			t.mu.Lock()
+			client.mu.Lock()
 			client.lastActive = time.Now()
-			t.mu.Unlock()
+			client.mu.Unlock()
 		}
 
 		// 限流逻辑处理
